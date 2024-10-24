@@ -31,6 +31,7 @@ app.use(cors({
     methods: "GET,POST,PUT,PATCH,DELETE",
     credentials: true
 }));
+app.options('*', cors());
 
 // Rate Limiting
 const limiter = rateLimit({
