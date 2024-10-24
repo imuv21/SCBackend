@@ -16,22 +16,21 @@ const DATABASE_URL = process.env.DATABASE_URL
 app.use(helmet());
 
 // CORS
+// CORS
 const allowedOrigins = [
     "http://localhost:5173",
-    "https://saiclasses.netlify.app/"
+    "https://saiclasses.netlify.app"
 ];
 app.use(cors({
     origin: function (origin, callback) {
-        if (!origin || allowedOrigins.includes(origin)) {
+        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
             callback(null, true);
         } else {
             callback(new Error('Not allowed by CORS'));
         }
     },
-    credentials: true,
     methods: "GET,POST,PUT,PATCH,DELETE",
-    preflightContinue: false,
-    optionsSuccessStatus: 204
+    credentials: true
 }));
 
 // Rate Limiting
