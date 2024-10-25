@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import Razorpay from 'razorpay';
 import { validationResult } from 'express-validator';
 import { v2 as cloudinary } from 'cloudinary';
 import { userModel, videoModel } from '../models/User.js';
@@ -14,7 +15,6 @@ cloudinary.config({
     api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET,
 });
-
 const uploadToCloudinary = (buffer) => {
     return new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream({ folder: 'SaiClasses/Profiles' }, (error, result) => {
@@ -27,6 +27,13 @@ const uploadToCloudinary = (buffer) => {
     });
 };
 
+//Razorpay
+const instance = new Razorpay({
+    key_id: process.env.RAZORPAY_API_KEY,
+    key_secret: process.env.RAZORPAY_API_SECRET,
+});
+
+//Pricing
 const pricing = {
     6: { basePrice: 100 },
     7: { basePrice: 120 },
@@ -35,6 +42,27 @@ const pricing = {
     10: { basePrice: 180 }
 };
 const subjectPrice = 50;
+
+// Helper function to update subscription and payment history
+const updateSubscriptionAndPaymentHistory = async (user, subAmount, duration, paymentDetails) => {
+    const startDate = new Date();
+    const endDate = new Date();
+    endDate.setMonth(endDate.getMonth() + duration);
+
+    const paymentRecord = {
+        paidAmount: subAmount,
+        duration: duration,
+        paymentDate: new Date(),
+        ...paymentDetails
+    };
+    if (user.subscription) {
+        user.subscription.isActive = true;
+        user.subscription.startDate = startDate;
+        user.subscription.endDate = endDate;
+        user.subscription.paymentHistory.push(paymentRecord);
+    }
+    await user.save();
+};
 
 class userCont {
 
@@ -70,7 +98,7 @@ class userCont {
 
                         const basePrice = pricing[classOp]?.basePrice || 0;
                         const subAmount = basePrice + (subjects.length * subjectPrice);
-                        const subscription = { subAmount, isActive: false, startDate: null, endDate: null };
+                        const subscription = { subAmount, isActive: false, startDate: null, endDate: null, paymentHistory: [] };
                         const newUser = new userModel({ firstName, lastName, email, password: hashPassword, classOp, subjects, image, otp, otpExpiry, subscription });
                         await newUser.save();
 
@@ -90,7 +118,7 @@ class userCont {
             <a href="" style="font-size:1.6em; color: white; text-decoration:none; font-weight:600">MarketPlace</a>
         </div>
         <p>Hello <span style="color: #5AB2FF; font-size: 1.2em; text-transform: capitalize;">${newUser.firstName}</span>!</p>
-        <p>Thank you for choosing MarketPlace. Use the following OTP to complete your Sign Up procedure. This OTP is valid for 5 minutes.</p>
+        <p>Thank you for choosing MarketPlace. Use the following OTP to complete your Sign Up procedure. This OTP is valid for 2 minutes.</p>
         <div style="display: flex; align-items: center; justify-content: center; width: 100%;">
             <div style="background: #5AB2FF; color: white; width: fit-content; border-radius: 3px; padding: 5px 10px; font-size: 1.4em;">${otp}</div>
         </div>
@@ -193,7 +221,8 @@ class userCont {
                             classOp: user.classOp,
                             subjects: user.subjects,
                             image: user.image,
-                            isVerified: user.isVerified
+                            isVerified: user.isVerified,
+                            subscription: user.subscription
                         };
                         return res.status(200).json({ status: "success", message: "User logged in successfully", token: token, user: userResponse });
                     } else {
@@ -282,59 +311,110 @@ class userCont {
     static fetchVideos = async (req, res) => {
 
         const { page, size, classOp, subject } = req.query;
-        const pageNumber = parseInt(page, 10);
-        const pageSize = parseInt(size, 10);
+        const pageNumber = parseInt(page, 10) || 1;
+        const pageSize = parseInt(size, 10) || 10;
         const userId = req.user._id;
         try {
             const user = await userModel.findById(userId);
             if (!user || !user.subscription.isActive) {
-                return res.status(403).json({ status: "failed", message: "You must purchase a subscription first!" });
+                return res.status(403).json({ status: "failed", message: "You must purchase subscription first!" });
             }
             const filter = {};
             if (classOp) filter.classOp = classOp;
-            if (subject) filter.subject = { $regex: new RegExp(subject, 'i') };
+
+            if (subject) {
+                if (user.subjects.includes(subject)) {
+                    filter.subject = { $regex: new RegExp(subject, 'i') };
+                } else {
+                    return res.status(400).json({ status: "failed", message: "Subject is not permitted." });
+                }
+            } else {
+                filter.subject = { $in: user.subjects };
+            }
 
             const totalVideos = await videoModel.countDocuments(filter);
+            const totalPages = Math.ceil(totalVideos / pageSize);
+            
+            if (pageNumber > totalPages) {
+                return res.status(200).json({ status: "success", totalVideos, currentPage: totalPages, pageSize, totalPages, videos: [], message: "No more videos available on this page." });
+            }
             const videos = await videoModel.find(filter).skip((pageNumber - 1) * pageSize).limit(pageSize);
 
-            return res.status(200).json({ status: "success", totalVideos, currentPage: pageNumber, pageSize, totalPages: Math.ceil(totalVideos / pageSize), videos });
+            return res.status(200).json({ status: "success", totalVideos, currentPage: pageNumber, pageSize, totalPages, videos });
         } catch (error) {
             return res.status(500).json({ status: "failed", message: "Server error. Please try again later." });
         }
     }
 
     //payment apis
+
+    static getKey = async (req, res) => {
+        return res.status(200).json({ key: process.env.RAZORPAY_API_KEY });
+    }
+
     static buySubscription = async (req, res) => {
-        const { subAmount, currency, duration } = req.body;
+        const { subAmount, duration } = req.body;
 
         try {
-            //payment code would be here 
-            const payment = true;
+            const userId = req.user._id;
+            if (!subAmount) {
+                return res.status(400).json({ status: "failed", message: "Amount is required" });
+            }
+            const amount = parseFloat(subAmount);
+            if (isNaN(amount) || amount <= 0) {
+                return res.status(400).json({ status: "failed", message: "Invalid amount provided" });
+            }
+            const options = {
+                amount: Math.round(amount * 100), currency: 'INR',
+                notes: {
+                    userId: userId,
+                    subAmount: subAmount,
+                    duration: duration,
+                }
+            };
+            const payment = await instance.orders.create(options);
             if (payment) {
-                const userId = req.user._id;
+                return res.status(200).json({ status: "success", message: "Order is created. Awaiting payment.", payment });
+            } else {
+                return res.status(400).json({ status: "failed", message: "Order creation failed!" });
+            }
+        } catch (error) {
+            console.error(error);
+            return res.status(500).json({ status: "failed", message: "Server error. Please try again later." });
+        }
+    };
+
+    static paymentVerification = async (req, res) => {
+        try {
+            const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+            const { userId, subAmount, duration } = req.query;
+
+            if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !subAmount || !duration) {
+                return res.status(400).json({ status: "failed", message: "Razorpay credentials are missing" });
+            }
+            const body = `${razorpay_order_id}|${razorpay_payment_id}`;
+            const expectedSignature = crypto.createHmac('sha256', process.env.RAZORPAY_API_SECRET).update(body).digest('hex');
+            const isAuthentic = expectedSignature === razorpay_signature;
+
+            if (isAuthentic) {
                 const user = await userModel.findById(userId);
                 if (!user) {
                     return res.status(404).json({ status: "failed", message: "User not found." });
                 }
-                const startDate = new Date();
-                const endDate = new Date();
-                endDate.setMonth(endDate.getMonth() + duration);
-
-                user.subscription.isActive = true;
-                user.subscription.startDate = startDate;
-                user.subscription.endDate = endDate;
-
-                await user.save();
-                return res.status(200).json({ status: "success", message: "Payment is completed." });
+                await updateSubscriptionAndPaymentHistory(user, subAmount, duration, {
+                    razorpay_order_id,
+                    razorpay_payment_id,
+                    razorpay_signature
+                });
+                return res.redirect(`${FRONTEND_URL}payment-success?reference=${razorpay_payment_id}`);
             } else {
-                return res.status(200).json({ status: "success", message: "Payment is not completed!" });
+                return res.status(400).json({ status: "failed", message: "Invalid signature. Payment verification failed." });
             }
-
         } catch (error) {
+            console.log(error);
             return res.status(500).json({ status: "failed", message: "Server error. Please try again later." });
         }
-    }
-
+    };
 }
 
 export default userCont;

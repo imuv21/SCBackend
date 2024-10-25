@@ -2,16 +2,38 @@ import mongoose from "mongoose";
 
 const classOptions = [6, 7, 8, 9, 10];
 
+const paymentHistorySchema = new mongoose.Schema({
+    paidAmount: {
+        type: Number,
+        required: true,
+    },
+    duration: {
+        type: Number, 
+        required: true,
+    },
+    paymentDate: {
+        type: Date,
+        default: Date.now, 
+    },
+    razorpay_order_id: {
+        type: String,
+        required: true,
+    },
+    razorpay_payment_id: {
+        type: String,
+        required: true,
+    },
+    razorpay_signature: {
+        type: String,
+        required: true,
+    }
+});
+
 //Subscription schema
 const subscriptionSchema = new mongoose.Schema({
     subAmount: {
         type: Number,
         required: true,
-    },
-    currency: {
-        type: String,
-        required: true,
-        default: 'INR', 
     },
     isActive: {
         type: Boolean,
@@ -22,7 +44,10 @@ const subscriptionSchema = new mongoose.Schema({
     },
     endDate: {
         type: Date,
-    }
+    },
+    paymentHistory: [{
+        type: paymentHistorySchema,
+    }]
 });
 
 //Video schema
@@ -100,7 +125,6 @@ userSchema.index({ email: 1 }, { unique: true });
 //Model
 const userModel = mongoose.model("User", userSchema);
 const videoModel = mongoose.model("Videos", videoSchema);
-
 export { userModel, videoModel };
 
 

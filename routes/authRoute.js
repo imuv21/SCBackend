@@ -7,7 +7,7 @@ import userCont from '../controllers/userCont.js';
 const router = express.Router();
 
 // Public routes
-router.post('/signup', rateLimiter({ windowMs: 60 * 60 * 1000, max: 5 }), upload.single('image'), signupValidator, userCont.userSignup);
+router.post('/signup', upload.single('image'), signupValidator, userCont.userSignup);
 router.post('/verify-otp', userCont.verifyOtp);
 
 router.post('/login', loginValidator, userCont.userLogin);

@@ -6,13 +6,13 @@ const router = express.Router();
 
 // Public routes
 router.post('/upload-video', videoValidator, userCont.uploadVideo);
+router.post('/paymentverify', userCont.paymentVerification);
 
 // Private routes
 router.use(authedUser);
 router.get('/videos', userCont.fetchVideos);
-router.post('/buy-sub', userCont.buySubscription);
 
-
-// router.post('/bla', userCont.bla);
+router.get('/getkey', userCont.getKey);
+router.post('/buysub', userCont.buySubscription);
 
 export default router;
