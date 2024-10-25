@@ -9,6 +9,8 @@ import dotenv from 'dotenv';
 dotenv.config();
 import sendMail from '../middlewares/sendMail.js';
 
+const FRONTEND_URL = process.env.FRONTEND_URL;
+
 //Cloudinary
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
