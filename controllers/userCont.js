@@ -2,6 +2,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import Razorpay from 'razorpay';
+import axios from 'axios';
 import { validationResult } from 'express-validator';
 import { v2 as cloudinary } from 'cloudinary';
 import { userModel, videoModel } from '../models/User.js';
@@ -299,9 +300,9 @@ class userCont {
         if (!errors.isEmpty()) {
             return res.status(400).json({ success: false, errors: errors.array() });
         }
-        const { classOp, subject, videoLink } = req.body;
+        const { classOp, subject, publicId } = req.body;
         try {
-            const newVideo = new videoModel({ classOp, subject, videoLink });
+            const newVideo = new videoModel({ classOp, subject, publicId });
             await newVideo.save();
 
             return res.status(201).json({ status: "success", message: `The video has been uploaded successfully!` });
@@ -336,7 +337,7 @@ class userCont {
 
             const totalVideos = await videoModel.countDocuments(filter);
             const totalPages = Math.ceil(totalVideos / pageSize);
-            
+
             if (pageNumber > totalPages) {
                 return res.status(200).json({ status: "success", totalVideos, currentPage: totalPages, pageSize, totalPages, videos: [], message: "No more videos available on this page." });
             }
@@ -347,6 +348,59 @@ class userCont {
             return res.status(500).json({ status: "failed", message: "Server error. Please try again later." });
         }
     }
+
+    static streamVideo = async (req, res) => {
+
+        const range = req.headers.range;
+        const { publicId, quality } = req.params;
+        if (!range || !publicId) {
+            return res.status(400).json({ message: "Range header or public id is missing" });
+        }
+
+        const qualityTransformations = {
+            '360p': 'q_auto:low,h_360',
+            '480p': 'q_auto:medium,h_480',
+            '720p': 'q_auto:good,h_720',
+            '1080p': 'q_auto:best,h_1080'
+        };
+        const transformation = qualityTransformations[quality] || 'q_auto:good';
+        const videoUrl = `https://res.cloudinary.com/dfsohhjfo/video/upload/${transformation}/Videos/${publicId}.mp4`;
+
+        try {
+            const headResponse = await axios.head(videoUrl);
+            const fileSize = parseInt(headResponse.headers["content-length"], 10);
+            const mimeType = headResponse.headers["content-type"];
+            const [start, end] = range.replace(/bytes=/, "").split("-");
+            const chunkStart = parseInt(start, 10);
+            const chunkEnd = end ? parseInt(end, 10) : fileSize - 1;
+            const contentLength = chunkEnd - chunkStart + 1;
+
+            res.writeHead(206, {
+                "Content-Range": `bytes ${chunkStart}-${chunkEnd}/${fileSize}`,
+                "Accept-Ranges": "bytes",
+                "Content-Length": contentLength,
+                "Content-Type": mimeType,
+                "Cross-Origin-Resource-Policy": "cross-origin",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Range",
+            });
+            const videoStream = await axios({
+                url: videoUrl,
+                method: "get",
+                responseType: "stream",
+                headers: { Range: `bytes=${chunkStart}-${chunkEnd}` },
+            });
+            videoStream.data.pipe(res);
+            videoStream.data.on("error", (err) => {
+                console.error("Error streaming video:", err);
+                return res.status(500).json({ message: "Error streaming video" });
+            });
+
+        } catch (error) {
+            console.error("Error fetching video:", error);
+            return res.status(404).json({ message: "Video not found" });
+        }
+    };
 
     //payment apis
 

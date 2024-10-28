@@ -61,7 +61,7 @@ const videoSchema = new mongoose.Schema({
         required: true,
         trim: true,
     },
-    videoLink: {
+    publicId: {
         type: String,
         required: true,
         trim: true,

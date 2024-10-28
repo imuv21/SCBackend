@@ -7,6 +7,7 @@ const router = express.Router();
 // Public routes
 router.post('/upload-video', videoValidator, userCont.uploadVideo);
 router.post('/paymentverify', userCont.paymentVerification);
+router.get('/streamvideo/:publicId/:quality', userCont.streamVideo);
 
 // Private routes
 router.use(authedUser);

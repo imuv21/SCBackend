@@ -48,7 +48,7 @@ const videoValidator = [
 
     check("subject").not().isEmpty().withMessage("Subject is required"),
 
-    check("videoLink").not().isEmpty().withMessage("Video link is required").isURL().withMessage("Video link must be a valid URL"),
+    check("publicId").not().isEmpty().withMessage("Public id is required"),
 ];
 
 export { signupValidator, loginValidator, videoValidator };
