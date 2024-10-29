@@ -6,9 +6,10 @@ import axios from 'axios';
 import { validationResult } from 'express-validator';
 import { v2 as cloudinary } from 'cloudinary';
 import { userModel, videoModel } from '../models/User.js';
+import sendMail from '../middlewares/sendMail.js';
 import dotenv from 'dotenv';
 dotenv.config();
-import sendMail from '../middlewares/sendMail.js';
+
 
 const FRONTEND_URL = process.env.FRONTEND_URL;
 
@@ -76,21 +77,19 @@ class userCont {
         if (!errors.isEmpty()) {
             return res.status(400).json({ success: false, errors: errors.array() });
         }
-
         const { firstName, lastName, email, password, confirmPassword, classOp, subjects } = req.body;
-
         const user = await userModel.findOne({ email: email });
+
         if (user) {
-            return res.status(400).send({ "status": "failed", "message": `User already exists` });
+            return res.status(400).json({ status: "failed", message: `User already exists` });
         } else {
             if (firstName && lastName && email && password && confirmPassword && classOp && subjects) {
                 if (password !== confirmPassword) {
-                    res.status(400).send({ "status": "failed", "message": "Passwords do not match" });
+                    return res.status(400).json({ status: "failed", message: "Passwords do not match" });
                 } else {
                     try {
                         const salt = await bcrypt.genSalt(10);
                         const hashPassword = await bcrypt.hash(password, salt);
-
                         const otp = crypto.randomInt(100000, 999999).toString(); // Generate 6-digit OTP
                         const otpExpiry = Date.now() + 2 * 60 * 1000; // OTP valid for 2 minutes
 
@@ -118,16 +117,16 @@ class userCont {
 
                         const msg = `<div style="font-family: 'Roboto', sans-serif; width: 100%;">
         <div style="background: #5AB2FF; padding: 10px 20px; border-radius: 3px; border: none">
-            <a href="" style="font-size:1.6em; color: white; text-decoration:none; font-weight:600">MarketPlace</a>
+            <a href="" style="font-size:1.6em; color: white; text-decoration:none; font-weight:600">Sai Classes</a>
         </div>
         <p>Hello <span style="color: #5AB2FF; font-size: 1.2em; text-transform: capitalize;">${newUser.firstName}</span>!</p>
-        <p>Thank you for choosing MarketPlace. Use the following OTP to complete your Sign Up procedure. This OTP is valid for 2 minutes.</p>
+        <p>Thank you for choosing Sai Classes. Use the following OTP to complete your Sign Up procedure. This OTP is valid for 2 minutes.</p>
         <div style="display: flex; align-items: center; justify-content: center; width: 100%;">
             <div style="background: #5AB2FF; color: white; width: fit-content; border-radius: 3px; padding: 5px 10px; font-size: 1.4em;">${otp}</div>
         </div>
       
         <p>Regards,</p>
-        <p>MarketPlace</p>
+        <p>Sai Classes</p>
                                    </div>`;
 
                         await sendMail(newUser.email, 'Verify your email', msg);
@@ -286,7 +285,7 @@ class userCont {
                 }
                 return res.status(200).json({ status: "success", message: "User profile updated successfully", user: updatedUser });
             } else {
-                return res.status(404).json({ status: "failed", message: "User not found" });
+                return res.status(404).json({ status: "failed", message: "Something went wrong" });
             }
         } catch (error) {
             return res.status(500).json({ status: "failed", message: "Server error. Please try again later." });

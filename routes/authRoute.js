@@ -9,7 +9,6 @@ const router = express.Router();
 // Public routes
 router.post('/signup', upload.single('image'), signupValidator, userCont.userSignup);
 router.post('/verify-otp', userCont.verifyOtp);
-
 router.post('/login', loginValidator, userCont.userLogin);
 router.get('/logout', userCont.userLogout);
 
