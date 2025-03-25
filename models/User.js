@@ -52,6 +52,11 @@ const subscriptionSchema = new mongoose.Schema({
 
 //Video schema
 const videoSchema = new mongoose.Schema({
+    vidTitle: {
+        type: String,
+        required: true,
+        trim: true,
+    },
     classOp: {
         type: Number,
         required: true,
@@ -65,6 +70,10 @@ const videoSchema = new mongoose.Schema({
         type: String,
         required: true,
         trim: true,
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now,
     }
 });
 
@@ -107,7 +116,7 @@ const userSchema = new mongoose.Schema({
         trim: true,
     },
     otp: {
-        type: String,
+        type: Number,
         trim: true,
     },
     otpExpiry: {

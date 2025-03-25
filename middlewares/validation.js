@@ -96,6 +96,8 @@ const updateProfileValidator = [
 ];
 
 const videoValidator = [
+    check("vidTitle")
+        .not().isEmpty().withMessage("Video title is required!"),
     check("classOp")
         .not().isEmpty().withMessage("Class is required!"),
     check("subject")

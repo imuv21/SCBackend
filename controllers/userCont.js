@@ -352,8 +352,8 @@ class userCont {
             return res.status(400).json({ status: "failed", errors: errors.array() });
         }
         try {
-            const { classOp, subject, publicId } = req.body;
-            const newVideo = new Video({ classOp, subject, publicId });
+            const { vidTitle, classOp, subject, publicId } = req.body;
+            const newVideo = new Video({ vidTitle, classOp, subject, publicId });
             await newVideo.save();
             return res.status(201).json({ status: "success", message: `The video has been uploaded successfully.` });
         } catch (error) {
@@ -362,38 +362,49 @@ class userCont {
     }
 
     static fetchVideos = async (req, res) => {
-
-        const { page, size, classOp, subject } = req.query;
-        const pageNumber = parseInt(page, 10) || 1;
-        const pageSize = parseInt(size, 10) || 10;
-        const userId = req.user._id;
         try {
-            const user = await User.findById(userId);
-            if (!user || !user.subscription.isActive) {
-                return res.status(403).json({ status: "failed", message: "You must purchase subscription first!" });
-            }
-            const filter = {};
-            if (classOp) filter.classOp = classOp;
+            let { page = 1, size = 10, search = "", classOp = null, subject = "", sortBy = "vidTitle", order = "asc" } = req.query;
+            page = Math.max(1, parseInt(page));
+            size = Math.max(1, Math.min(parseInt(size), 100)); 
 
+            const filter = {};
+            if (search) {
+                filter.$or = [
+                    { vidTitle: { $regex: search, $options: "i" } },
+                ];
+            }
+            if (classOp) {
+                filter.classOp = parseInt(classOp);
+            }
+            const userId = req.user._id;
+            const user = await User.findById(userId).select('subjects subscription');
+            if (!user || !user.subscription?.isActive) {
+                return res.status(403).json({ status: "failed", message: "Subscription is required!" });
+            }
             if (subject) {
-                if (user.subjects.includes(subject)) {
-                    filter.subject = { $regex: new RegExp(subject, 'i') };
-                } else {
-                    return res.status(400).json({ status: "failed", message: "Subject is not permitted!" });
+                if (!user.subjects.map(s => s.toLowerCase()).includes(subject.toLowerCase())) {
+                    return res.status(400).json({ status: "failed", message: "Subject not permitted!" });
                 }
+                filter.subject = { $regex: new RegExp(`^${subject}$`, 'i') };
             } else {
                 filter.subject = { $in: user.subjects };
             }
+            const sortOptions = {
+                vidTitle: { vidTitle: order === "asc" ? 1 : -1 },
+                createdAt: { createdAt: order === "asc" ? 1 : -1 },
+            };
+            const sortCriteria = sortOptions[sortBy] || sortOptions.vidTitle;
+            const [videos, totalVideos] = await Promise.all([ Video.find(filter).sort(sortCriteria).skip((page - 1) * size).limit(size).lean(), Video.countDocuments(filter) ]);
 
-            const totalVideos = await Video.countDocuments(filter);
-            const totalPages = Math.ceil(totalVideos / pageSize);
+            const totalPages = Math.ceil(totalVideos / size);
+            const pageVideos = videos.length;
+            const isFirst = page === 1;
+            const isLast = page === totalPages || totalPages === 0;
+            const hasNext = page < totalPages;
+            const hasPrevious = page > 1;
 
-            if (pageNumber > totalPages) {
-                return res.status(200).json({ status: "success", totalVideos, currentPage: totalPages, pageSize, totalPages, videos: [], message: "No more videos available on this page!" });
-            }
-            const videos = await Video.find(filter).skip((pageNumber - 1) * pageSize).limit(pageSize);
+            return res.status(200).json({ status: "success", products: videos, totalVideos, totalPages, pageVideos, isFirst, isLast, hasNext, hasPrevious });
 
-            return res.status(200).json({ status: "success", totalVideos, currentPage: pageNumber, pageSize, totalPages, videos });
         } catch (error) {
             return res.status(500).json({ status: "failed", message: "Server error, Please try again later!" });
         }
