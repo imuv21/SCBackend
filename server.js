@@ -1,7 +1,7 @@
 import { createServer } from "http";
 import { app } from "./app.js";
 import cron from 'node-cron';
-import { userModel } from "./models/User.js";
+import { User } from "./models/User.js";
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -11,7 +11,7 @@ const server = createServer(app);
 
 // Cron schedule
 cron.schedule('0 0 * * *', async () => {
-    const users = await userModel.find();
+    const users = await User.find();
     const now = new Date();
 
     for (const user of users) {

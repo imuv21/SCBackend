@@ -94,6 +94,7 @@ const userSchema = new mongoose.Schema({
     email: {
         type: String,
         required: true,
+        unique: true,
         trim: true,
     },
     password: {
@@ -119,16 +120,14 @@ const userSchema = new mongoose.Schema({
     subscription: subscriptionSchema
 });
 
-//Composite index on email
-userSchema.index({ email: 1 }, { unique: true });
+//Models
+const User = mongoose.model("User", userSchema);
+const Video = mongoose.model("Video", videoSchema);
 
-//Model
-const userModel = mongoose.model("User", userSchema);
-const videoModel = mongoose.model("Videos", videoSchema);
-export { userModel, videoModel };
+export { User, Video };
 
 
-// const notificationSchema = new mongoose.Schema({
+
 //     type: {
 //         type: String,
 //         required: true,

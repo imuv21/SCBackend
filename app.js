@@ -1,11 +1,11 @@
 
 import cors from 'cors';
-import connectDB from './config/connectDB.js';
-import authRoute from './routes/authRoute.js';
-import featRoute from './routes/featRoute.js';
 import express from 'express';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import connectDB from './config/connectDB.js';
+import authRoute from './routes/authRoute.js';
+import featRoute from './routes/featRoute.js';
 import dotenv from 'dotenv';
 dotenv.config();
 export const app = express();
